@@ -99,17 +99,14 @@ template <typename T> struct IWHS {
 // Computes the interval-with-header set for each node in the cfg and creates a
 // map from nodes to iwhs. An extension to intervalWithHeader.
 template <typename T> IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
-  vector<set<T *>*> sets;
-  map<T *, set<T *>*> map;
+  vector<set<T *> *> sets;
+  map<T *, set<T *> *> map;
 
   for (auto Node : cfg.getNodes()) {
     auto h = Node.first;
-    outs() << "[DEBUG] Looking at node " << h << '\n';
     // h is already associated to a set.
     if (map.find(h) != map.end())
       continue;
-
-    outs() << "[DEBUG] ... it is not in the map yet.\n";
 
     // Create a new set and get a reference to it.
     sets.push_back(new set<T *>);
@@ -136,7 +133,6 @@ template <typename T> IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
           {
             auto it = map.find(n);
             if (it != map.end()) {
-              outs() << "[DEBUG] Need to merge sets!!\n";
               for (auto wrong : map) {
                 // Remap all nodes pointing to the old set.
                 if (wrong.second == it->second) {
@@ -151,7 +147,6 @@ template <typename T> IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
               map[n] = &iwh;
             }
           }
-          outs() << "[DEBUG] Add node " << n << " to set of node " << h << '\n';
         continue_outer:;
         }
       }
@@ -167,7 +162,6 @@ template <typename T> IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
     auto it = indeces.find(p.second);
     if (it != indeces.end()) {
       result.map[p.first] = it->second;
-      outs() << "[DEBUG] mapping " << p.first << " to " << it->second << '\n';
       continue;
     }
     indeces[p.second] = result.sets.size();
@@ -200,11 +194,8 @@ template <typename T> DerivedGraph<T> getDerivedGraph(Graph<T> cfg) {
   for (auto Node : cfg.getNodes()) {
     T *parent = Node.first;
     for (auto child : cfg.getSuccessors(parent)) {
-      outs() << "[DEBUG] Looking at connection " << parent << " -> " << child << '\n';
       auto *p = &result.iwhs.sets[result.iwhs.map[parent]];
       auto *c = &result.iwhs.sets[result.iwhs.map[child]];
-      outs() << "[DEBUG] p=" << p << " c=" << c << '\n';
-      outs() << "[DEBUG] result.g.hasSuccessor(p, c): " << result.g.hasSuccessor(p, c) << '\n';
       if (p != c && !result.g.hasSuccessor(p, c)) {
         result.g.addEdge(p, c);
       }
@@ -239,15 +230,8 @@ template <typename T> bool isReducible(const Graph<T> &g) {
   auto dg = getDerivedGraph(g);
   dg.g.name = "F_" + std::to_string(count++);
 
-  outs() << "[DEBUG] Derived Graph:";
-  for (auto Node : dg.g.getNodes()) {
-    auto *set = Node.first;
-    outs() << ' ' << set->size();
-  }
-  outs() << '\n';
-
   string filename = dg.g.name + ".dot";
-  outs() << "[DEBUG] writing file " << filename << '\n';
+  errs() << "[CheckIrreducibleCFG] Writing file " << filename << '\n';
   ofstream out(filename);
   out << dg.g.toDot();
   out.close();
@@ -281,6 +265,9 @@ bool CheckIrreducibleCFGPass::runOnFunction(Function &F) {
   if (!isReducible(cfg)) {
     errs() << "[CheckIrreducibleCFG] Function " << F.getName() << " in module "
            << F.getParent()->getName() << " has an irreducible CFG!\n";
+  } else {
+    errs() << "[CheckIrreducibleCFG] Function " << F.getName() << " in module "
+           << F.getParent()->getName() << " has a reducible CFG.\n";
   }
 
   return false;
