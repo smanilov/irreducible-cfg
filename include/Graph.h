@@ -9,6 +9,8 @@ using std::string;
 using std::map;
 #include <set>
 using std::set;
+#include <sstream>
+using std::stringstream;
 
 namespace cic {
 
@@ -23,6 +25,7 @@ protected:
 
 public:
   string name;
+  ValueType *beginNode;
 
   typedef typename map<ValueType *, Connections<ValueType>>::iterator
       nodes_iterator;
@@ -117,6 +120,21 @@ public:
     return sum;
   }
 
+  // Generate a .dot format representation of the digraph.
+  string toDot() const {
+    stringstream ss;
+    ss << "digraph \"" << name << "\" {\n";
+    ss << "  label=\"" << name << "\";\n";
+    for (auto Node : Nodes) {
+      auto *parent = Node.first;
+      ss << "  Node" << parent << " [shape=record];\n";
+      for (auto *succ : getSuccessors(parent)) {
+        ss << "  Node" << parent << " -> Node" << succ << ";\n";
+      }
+    }
+    ss << "}";
+    return ss.str();
+  }
   succ_iterator succ_begin(ValueType *A) {
     return Nodes.at(A).successors.begin();
   }
