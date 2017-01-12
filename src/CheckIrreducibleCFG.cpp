@@ -3,8 +3,14 @@
 #include <set>
 using std::set;
 
+#include <vector>
+using std::vector;
+
 #include "llvm/PassSupport.h"
 using llvm::RegisterPass;
+
+#include "llvm/IR/Module.h"
+using llvm::Module;
 
 #include "llvm/IR/BasicBlock.h"
 using llvm::BasicBlock;
@@ -53,8 +59,7 @@ Graph<BasicBlock> construct_cfg(Function &F) {
 // (2) If n is a node not yet in I(h), n is not the begin node, and all edges
 //     entering n leave nodes in I(h), then add n to I(h).
 // (3) Repeate step (2) until no more nodes can be added to I(h).
-template <typename T>
-set<T *> intervalWithHeader(Graph<T> cfg, T *h) {
+template <typename T> set<T *> intervalWithHeader(Graph<T> cfg, T *h) {
   set<T *> result;
   result.insert(h);
   bool new_members;
@@ -79,16 +84,14 @@ set<T *> intervalWithHeader(Graph<T> cfg, T *h) {
   return result;
 }
 
-template <typename T>
-struct IWHS {
-  map<T*, set<T *>> map;
-  set<set<T *>> sets;
+template <typename T> struct IWHS {
+  map<T *, unsigned> map;
+  vector<set<T *>> sets;
 };
 
 // Computes the interval-with-header set for each node in the cfg and creates a
 // map from nodes to iwhs. An extension to intervalWithHeader.
-template <typename T>
-IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
+template <typename T> IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
   // Multiple nodes can be associated with the same set, so to avoid copying
   // sets, this map needs to be from T* to set<T*>*. Thus we need a separate
   // storage for the sets.
@@ -97,12 +100,14 @@ IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
   for (auto Node : cfg.getNodes()) {
     auto h = Node.first;
     // h is already associated to a set.
-    if (result.map.find(h) != result.map.end()) continue;
+    if (result.map.find(h) != result.map.end())
+      continue;
 
     // Create a new set and get a reference to it.
-    set<T *> &iwh = *result.sets.insert({});
+    result.sets.push_back({});
+    set<T *> &iwh = result.sets.back();
     iwh.insert(h);
-    result.map[h] = &iwh;
+    result.map[h] = result.sets.size() - 1;
     bool new_members;
     do {
       for (auto *ih : iwh) {
@@ -118,7 +123,7 @@ IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
           }
           new_members = true;
           iwh.insert(n);
-          result.map[n] = &iwh;
+          result.map[n] = result.sets.size() - 1;
         continue_outer:;
         }
       }
@@ -128,28 +133,32 @@ IWHS<T> getIntervalsWithHeaders(Graph<T> cfg) {
 }
 
 // Also owns the memory where the nodes are stored (unlike the Graph class).
-template <typename T>
-struct DerivedGraph {
+template <typename T> struct DerivedGraph {
   // Storage.
   IWHS<T> iwhs;
-  Graph<set<T*>> g;
+  Graph<set<T *>> g;
 };
 
-template <typename T>
-DerivedGraph<T> getDerivedGraph(Graph<T> cfg) {
+template <typename T> DerivedGraph<T> getDerivedGraph(Graph<T> cfg) {
   DerivedGraph<T> result;
 
   result.iwhs = getIntervalsWithHeaders(cfg);
-  for (auto &iwh : result.iwhs.sets) {
+  for (set<T *> &iwh : result.iwhs.sets) {
     result.g.addNode(&iwh);
+  }
+
+  for (auto &s : result.iwhs.sets) {
+  }
+
+  for (auto &p : result.iwhs.map) {
   }
 
   for (auto Node : cfg.getNodes()) {
     T *parent = Node.first;
-    for (auto child : Node.second) {
-      auto *p = result.iwhs.map[parent];
-      auto *c = result.iwhs.map[child];
-      if (!result.g.hasSuccessor(p, c)) {
+    for (auto child : cfg.getSuccessors(parent)) {
+      auto *p = &result.iwhs.sets[result.iwhs.map[parent]];
+      auto *c = &result.iwhs.sets[result.iwhs.map[child]];
+      if (p != c && !result.g.hasSuccessor(p, c)) {
         result.g.addEdge(p, c);
       }
     }
@@ -158,8 +167,54 @@ DerivedGraph<T> getDerivedGraph(Graph<T> cfg) {
   return result;
 }
 
+// Make a copy of the Graph, changing the ValueType to void.
+template <typename T> Graph<void> eraseTypeInfo(Graph<T> g) {
+  Graph<void> result;
+
+  for (auto &Node : g.getNodes()) {
+    result.addNode(Node.first);
+  }
+
+  for (auto &Node : g.getNodes()) {
+    auto *parent = Node.first;
+    for (auto *child : g.getSuccessors(parent)) {
+      result.addEdge(parent, child);
+    }
+  }
+
+  return result;
+}
+
+template <typename T> bool isReducible(const Graph<T> &g) {
+  if (g.size() == 1)
+    return true;
+  auto dg = getDerivedGraph(g);
+
+  if (dg.g.size() == 1)
+    return true;
+  // If all nodes in the derived graph are sets of single nodes, then the
+  // derived graph is the limit of the original graph. Since it has more than
+  // a single node, then the original graph is not reducible.
+  bool isLimit = true;
+  for (auto Node : dg.g.getNodes()) {
+    auto *set = Node.first;
+    isLimit &= set->size() == 1;
+  }
+  if (isLimit)
+    return false;
+
+  // It is necessary to erase the type info, so that infinite template expansion
+  // is avoided.
+  return isReducible(eraseTypeInfo(dg.g));
+}
+
 bool CheckIrreducibleCFGPass::runOnFunction(Function &F) {
   Graph<BasicBlock> cfg = construct_cfg(F);
+
+  if (!isReducible(cfg)) {
+    errs() << "[CheckIrreducibleCFG] Function " << F.getName() << " in module "
+           << F.getParent()->getName() << " has an irreducible CFG!\n";
+  }
 
   return false;
 }

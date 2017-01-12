@@ -26,9 +26,8 @@ public:
 
   typedef typename map<ValueType *, Connections<ValueType>>::iterator
       nodes_iterator;
-  typedef
-      typename map<ValueType *, Connections<ValueType>>::const_iterator
-          const_nodes_iterator;
+  typedef typename map<ValueType *, Connections<ValueType>>::const_iterator
+      const_nodes_iterator;
 
   typedef typename set<ValueType *>::iterator succ_iterator;
   typedef typename set<ValueType *>::const_iterator const_succ_iterator;
@@ -39,6 +38,9 @@ public:
 
   /// Checks if the graph contains node A.
   bool contains(ValueType *A) { return Nodes.find(A) != Nodes.end(); }
+
+  /// Checks if the graph contains node A.
+  bool hasNode(ValueType *A) { return contains(A); }
 
   void addEdge(ValueType *From, ValueType *To) {
     Nodes[From].successors.insert(To);
@@ -101,13 +103,13 @@ public:
   }
 
   /// Get the number of nodes of the graph.
-  unsigned size() { return Nodes.size(); }
+  unsigned size() const { return Nodes.size(); }
 
   /// Get the number of nodes of the graph.
-  unsigned numOfNodes() { return size(); }
+  unsigned numOfNodes() const { return size(); }
 
   /// Get the number of edges of the graph.
-  unsigned numOfEdges() {
+  unsigned numOfEdges() const {
     unsigned sum = 0;
     for (auto &Node : Nodes) {
       sum += Node.second.successors.size();
@@ -118,9 +120,7 @@ public:
   succ_iterator succ_begin(ValueType *A) {
     return Nodes.at(A).successors.begin();
   }
-  succ_iterator succ_end(ValueType *A) {
-    return Nodes.at(A).successors.end();
-  }
+  succ_iterator succ_end(ValueType *A) { return Nodes.at(A).successors.end(); }
 
   pred_iterator pred_begin(ValueType *A) {
     return Nodes.at(A).predecessors.begin();
