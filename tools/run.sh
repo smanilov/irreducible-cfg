@@ -1,4 +1,4 @@
-SCRIPTS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SCRIPTS_DIR="$( cd "$( dirname "$0" )" && pwd )"
 ROOT_DIR="$SCRIPTS_DIR/.."
 INSTALL_DIR="$ROOT_DIR/install"
 
